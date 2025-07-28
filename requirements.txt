@@ -1,0 +1,31 @@
+# Google Cloud clients
+google-cloud-storage>=2.10.0
+google-cloud-vision>=3.5.0
+google-cloud-texttospeech>=2.12.0
+
+
+# PDF & EPUB parsing
+pdfminer.six>=20221105    # born‑digital PDF text extraction
+ebooklib>=0.18            # EPUB parsing
+
+# HTML parsing for EPUB
+beautifulsoup4>=4.12.0
+
+# Clustering helper
+jenkspy>=0.2.8
+
+# OCR bounding‑box helper types (pulled in by vision client)
+proto-plus>=1.22.2
+
+# Web Framework and ASGI server for the API
+fastapi
+uvicorn[standard]
+
+# (Optional) If you switch to PyMuPDF instead of pdfminer:
+# PyMuPDF>=1.23.0
+
+# You do not need pydub or ffmpeg-python here—FFmpeg is installed at the OS level in your image.
+# Likewise, no asyncio/threadpool deps unless you explicitly add concurrency.
+
+# Pin your dependencies for reproducibility:
+# e.g. google-cloud-storage==2.11.0
