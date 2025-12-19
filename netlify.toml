@@ -3,5 +3,8 @@ base = "text-to-audio-frontend"
 command = "npm run build"
 publish = ".next"
 
+[build.environment]
+NODE_VERSION = "18"
+
 [[plugins]]
 package = "@netlify/plugin-nextjs"
