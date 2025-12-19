@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Temp files
+/tmp/
+*.log
+*.sqlite3
+
+# Google Cloud credentials or local downloads
+*.json
+keys/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend (Next.js/Node)
+text-to-audio-frontend/node_modules/
+text-to-audio-frontend/.next/
+text-to-audio-frontend/.turbo/
+text-to-audio-frontend/.vercel/
+text-to-audio-frontend/.env
+
+# Secrets / creds
+*.key
+*service-account*.json
+GOOGLE_APPLICATION_CREDENTIALS*.json
+keys/
+
+# Env
+.env
+.env.*
