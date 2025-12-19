@@ -2,10 +2,17 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   const backendUrl = process.env.BACKEND_URL;
+  const apiKey = process.env.API_KEY;
 
   if (!backendUrl) {
     return NextResponse.json(
       { error: "BACKEND_URL not configured on server" },
+      { status: 500 }
+    );
+  }
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "API_KEY not configured on server" },
       { status: 500 }
     );
   }
@@ -17,7 +24,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${backendUrl}/upload_url`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
       body: JSON.stringify(body),
     });
 

@@ -15,7 +15,6 @@ const voices = [
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [userId, setUserId] = useState<string>("test-user-123"); // Placeholder user ID
   const [selectedVoice, setSelectedVoice] = useState<string>(voices[0].name);
   const [status, setStatus] = useState<
     "idle" | "uploading" | "processing" | "success" | "error"
@@ -26,6 +25,13 @@ export default function Home() {
   const [stepMessage, setStepMessage] = useState<string>("");
 
   const MAX_MB = 20;
+
+  const generateUserId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `u_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -109,10 +115,11 @@ export default function Home() {
     setStepMessage("Requesting upload URL...");
 
     try {
+      const requestUserId = generateUserId();
       // 1. Get a signed URL for upload (via local proxy)
       console.log("[Frontend] Step 1: Getting signed upload URL...");
       const uploadUrlData = await postJson("/api/upload_url", {
-        user_id: userId,
+        user_id: requestUserId,
         file_name: selectedFile.name,
       });
 
@@ -144,7 +151,7 @@ export default function Home() {
       console.log("[Frontend] Step 3: Processing document...");
 
       const processData = await postJson("/api/process", {
-        user_id: userId,
+        user_id: requestUserId,
         remote_path: gcs_path,
         voice_name: selectedVoice,
       });

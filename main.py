@@ -2,6 +2,7 @@ import os
 import uuid
 import subprocess
 import google.auth
+import re
 # Removed argparse as it's not used for FastAPI app execution
 # from argparse import ArgumentParser # No longer needed
 
@@ -23,6 +24,7 @@ from storage import download_blob, upload_blob, presigned_url, delete_blob, get_
 BUCKET_NAME = os.getenv("BUCKET_NAME", "my-text-to-audio-bucket") # Replace with your actual GCS bucket name or ensure env var is always set
 VOICE = os.getenv("VOICE_NAME", "en-US-Wavenet-F")
 LANG_CODE = os.getenv("LANG_CODE", "en-US") # Derived from voice, but explicitly set for clarity
+API_KEY = os.getenv("API_KEY")
 
 # Resolve GCP project ID from env or ADC, so Cloud Run and local dev both work without manual env setup.
 GOOGLE_CLOUD_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
@@ -56,6 +58,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:3003",  # Allow your Next.js frontend, currently running on 3003
+    "https://pdftoaudioconverter.netlify.app",
     # You can add other origins here, e.g., your deployed frontend URL
     # "https://your-frontend-domain.com",
 ]
@@ -90,6 +93,48 @@ class ProcessRequest(BaseModel):
     voice_name: str | None = None # Optional voice name from the frontend
 
 
+def _require_api_key(request: Request) -> None:
+    if not API_KEY:
+        raise HTTPException(status_code=500, detail="API key not configured.")
+    provided = request.headers.get("x-api-key")
+    if not provided or provided != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+
+
+def _validate_user_id(user_id: str) -> None:
+    if not user_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id.")
+
+
+def _validate_file_name(file_name: str) -> None:
+    if not file_name or len(file_name) > 200:
+        raise HTTPException(status_code=400, detail="Invalid file_name.")
+    if os.path.basename(file_name) != file_name:
+        raise HTTPException(status_code=400, detail="Invalid file_name.")
+    if ".." in file_name or "/" in file_name or "\\" in file_name:
+        raise HTTPException(status_code=400, detail="Invalid file_name.")
+    ext = os.path.splitext(file_name)[1].lower()
+    if ext not in {".pdf", ".epub"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+
+def _validate_remote_path(user_id: str, remote_path: str) -> None:
+    if not remote_path:
+        raise HTTPException(status_code=400, detail="Invalid remote_path.")
+    if ".." in remote_path or "\\" in remote_path:
+        raise HTTPException(status_code=400, detail="Invalid remote_path.")
+    prefix = f"users/{user_id}/input/"
+    if not remote_path.startswith(prefix):
+        raise HTTPException(status_code=400, detail="Invalid remote_path.")
+    file_name = os.path.basename(remote_path)
+    _validate_file_name(file_name)
+
+
+def _validate_file_id(file_id: str) -> None:
+    if not file_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", file_id):
+        raise HTTPException(status_code=400, detail="Invalid file_id.")
+
+
 # --- New Endpoint: Get Signed URL for Upload ---
 @app.post("/upload_url")
 async def get_upload_signed_url(request: Request, upload_request: Optional[UploadUrlRequest] = None): # Use Request and Optional Pydantic model
@@ -105,7 +150,10 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
     if not upload_request:
         raise HTTPException(status_code=400, detail="Request body is missing for POST method.")
 
+    _require_api_key(request)
     print(f"Received request for /upload_url. User ID: {upload_request.user_id}, File Name: {upload_request.file_name}")
+    _validate_user_id(upload_request.user_id)
+    _validate_file_name(upload_request.file_name)
     user_id = upload_request.user_id
     file_name = upload_request.file_name
     # Force content_type to application/octet-stream for consistency with GCS signed URLs
@@ -134,15 +182,18 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
 
 # --- Main Endpoint: Process Document ---
 @app.post("/process")
-async def process_document_endpoint(request: ProcessRequest): # Renamed to avoid conflict with old process_file
+async def process_document_endpoint(request: Request, payload: ProcessRequest): # Renamed to avoid conflict with old process_file
     """
     Processes a PDF/EPUB, converts it to MP3, uploads to GCS, and returns a signed URL.
     Input and temporary files are immediately deleted from GCS and local storage.
     """
-    user_id = request.user_id
+    _require_api_key(request)
+    _validate_user_id(payload.user_id)
+    _validate_remote_path(payload.user_id, payload.remote_path)
+    user_id = payload.user_id
     # remote_path is now the full GCS path provided by the frontend after /upload_url
-    full_gcs_input_path = request.remote_path # e.g., "users/your-uuid/input/my_doc.pdf"
-    voice_name = request.voice_name or VOICE # Use voice from request or fallback to default
+    full_gcs_input_path = payload.remote_path # e.g., "users/your-uuid/input/my_doc.pdf"
+    voice_name = payload.voice_name or VOICE # Use voice from request or fallback to default
 
     # Extract filename for local storage (e.g., "my_doc.pdf")
     local_in_filename = os.path.basename(full_gcs_input_path)
@@ -295,6 +346,7 @@ async def process_document_endpoint(request: ProcessRequest): # Renamed to avoid
 # --- Updated /cleanup endpoint to use user_id ---
 @app.delete("/cleanup")
 async def cleanup_endpoint(
+    request: Request,
     user_id: str, # Now requires user_id
     file_id: str = Query(..., description="Base filename (without extension) for the user's files to delete")
 ):
@@ -302,6 +354,9 @@ async def cleanup_endpoint(
     Delete the WAV and MP3 blobs for the given file_id for a specific user.
     This is useful for manually cleaning up user's output files if needed.
     """
+    _require_api_key(request)
+    _validate_user_id(user_id)
+    _validate_file_id(file_id)
     # Construct user-specific paths for deletion
     tmp_wav_path    = f"users/{user_id}/tmp/{file_id}.wav"
     output_mp3_path = f"users/{user_id}/output/{file_id}.mp3"
