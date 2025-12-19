@@ -33,4 +33,4 @@ EXPOSE 8080
 # "main:app" assumes your FastAPI application object is named 'app'
 # and is defined in a file named 'main.py' at the root of your WORKDIR.
 # Adjust "main:app" if your application file or object name differs (e.g., "app:app" if it's app.py).
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

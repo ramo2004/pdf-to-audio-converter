@@ -20,6 +20,7 @@ proto-plus>=1.22.2
 # Web Framework and ASGI server for the API
 fastapi
 uvicorn[standard]
+python-multipart
 
 # (Optional) If you switch to PyMuPDF instead of pdfminer:
 # PyMuPDF>=1.23.0
