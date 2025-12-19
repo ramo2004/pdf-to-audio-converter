@@ -1,0 +1,331 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import styles from "./page.module.css";
+
+// A list of some available Google Cloud TTS voices
+const voices = [
+  { name: "en-US-Wavenet-F", label: "Warm storyteller (US • Female)" },
+  { name: "en-US-Wavenet-A", label: "Calm narrator (US • Male)" },
+  { name: "en-GB-Wavenet-F", label: "Bright reader (UK • Female)" },
+  { name: "en-GB-Wavenet-A", label: "Steady guide (UK • Male)" },
+  { name: "en-AU-Wavenet-F", label: "Light tone (AU • Female)" },
+  { name: "en-AU-Wavenet-A", label: "Easygoing (AU • Male)" },
+];
+
+export default function Home() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [userId, setUserId] = useState<string>("test-user-123"); // Placeholder user ID
+  const [selectedVoice, setSelectedVoice] = useState<string>(voices[0].name);
+  const [status, setStatus] = useState<
+    "idle" | "uploading" | "processing" | "success" | "error"
+  >("idle");
+  const [progress, setProgress] = useState<number>(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [stepMessage, setStepMessage] = useState<string>("");
+
+  const MAX_MB = 20;
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+      setStatus("idle");
+      setError(null);
+      setAudioUrl(null);
+      setProgress(0);
+    }
+  };
+
+  // Helper to make POST requests with better error handling
+  const postJson = async (url: string, body: object) => {
+    console.log(`[Frontend] POST ${url}`, body);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    console.log(`[Frontend] Response ${res.status}:`, text);
+
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // Not JSON
+    }
+
+    if (!res.ok) {
+      const errorMsg = json?.detail || json?.error || text || `HTTP ${res.status}`;
+      throw new Error(errorMsg);
+    }
+
+    return json ?? text;
+  };
+
+  const uploadFileWithProgress = (url: string, file: File) => {
+    return new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", file.type || "application/pdf");
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = (event.loaded / event.total) * 100;
+          setProgress(percent);
+          setStepMessage(`Uploading... ${percent.toFixed(0)}%`);
+        }
+      };
+
+      xhr.onload = () => {
+        resolve(new Response(xhr.responseText, { status: xhr.status }));
+      };
+
+      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.onabort = () => reject(new Error("Upload aborted"));
+
+      xhr.send(file);
+    });
+  };
+
+  const handleUploadAndProcess = async () => {
+    if (!selectedFile) {
+      setError("Please select a file first.");
+      setStatus("error");
+      return;
+    }
+
+    if (selectedFile.size > MAX_MB * 1024 * 1024) {
+      setError(`File too large. Max ${MAX_MB}MB.`);
+      setStatus("error");
+      return;
+    }
+
+    setStatus("uploading");
+    setError(null);
+    setAudioUrl(null);
+    setProgress(0);
+    setStepMessage("Requesting upload URL...");
+
+    try {
+      // 1. Get a signed URL for upload (via local proxy)
+      console.log("[Frontend] Step 1: Getting signed upload URL...");
+      const uploadUrlData = await postJson("/api/upload_url", {
+        user_id: userId,
+        file_name: selectedFile.name,
+      });
+
+      const { signed_url, gcs_path } = uploadUrlData;
+      if (!signed_url) {
+        throw new Error("No signed_url returned from backend");
+      }
+      console.log("[Frontend] Got signed URL, gcs_path:", gcs_path);
+      setStepMessage("Uploading file...");
+
+      // 2. Upload the file directly to GCS using the signed URL
+      console.log("[Frontend] Step 2: Uploading file to GCS...");
+      const uploadResponse = await uploadFileWithProgress(signed_url, selectedFile);
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        throw new Error(
+          `GCS upload failed (${uploadResponse.status}): ${errorText}`
+        );
+      }
+      console.log("[Frontend] File uploaded to GCS successfully");
+      setProgress(100);
+      setStepMessage("Upload complete");
+
+      // 3. Trigger backend processing (via local proxy)
+      setStatus("processing");
+      setProgress(0);
+      setStepMessage("Processing document (this may take a minute)...");
+      console.log("[Frontend] Step 3: Processing document...");
+
+      const processData = await postJson("/api/process", {
+        user_id: userId,
+        remote_path: gcs_path,
+        voice_name: selectedVoice,
+      });
+
+      const { audio_url } = processData;
+      if (!audio_url) {
+        throw new Error("No audio_url returned from backend");
+      }
+
+      console.log("[Frontend] Processing complete, audio URL received");
+      setAudioUrl(audio_url);
+      setStatus("success");
+      setStepMessage("Done! Your audio is ready.");
+    } catch (err: any) {
+      console.error("[Frontend] Error:", err);
+      setError(err.message || "An unknown error occurred.");
+      setStatus("error");
+      setStepMessage("");
+    }
+  };
+
+  const buttonText = useMemo(() => {
+    switch (status) {
+      case "uploading":
+        return `Uploading... ${progress.toFixed(0)}%`;
+      case "processing":
+        return "Processing...";
+      case "success":
+        return "Done!";
+      default:
+        return "Convert to Audio";
+    }
+  }, [status, progress]);
+
+  return (
+    <main className={styles.shell}>
+      <div className={styles.backgroundGlow} />
+      <div className={styles.grid}>
+        <section className={styles.hero}>
+          <div className={styles.badge}>AI Narrator</div>
+          <h1 className={styles.title}>
+            Hand off your PDF and we'll read it back to you.
+          </h1>
+          <p className={styles.subtitle}>
+            Upload a PDF or EPUB, pick a tone you like, and get a warm narration you can stream or download.
+          </p>
+
+          <div className={styles.heroStats}>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Voices</span>
+              <span className={styles.statValue}>Friendly presets</span>
+            </div>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Length</span>
+              <span className={styles.statValue}>Long-form ready</span>
+            </div>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Output</span>
+              <span className={styles.statValue}>Stream & download</span>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.panelEyebrow}>Step-by-step</p>
+              <h2 className={styles.panelTitle}>Upload &amp; convert</h2>
+            </div>
+            <div className={styles.pulse}>
+              <span className={styles.dot} />
+              <span className={styles.dot} />
+              <span className={styles.dot} />
+            </div>
+          </div>
+
+          {/* File Upload Section */}
+          <div className={styles.formGroup}>
+            <label htmlFor="file-upload" className={styles.label}>
+              Upload PDF or EPUB
+            </label>
+            <div className={styles.fileInput}>
+              <input
+                id="file-upload"
+                type="file"
+                accept=".pdf,.epub"
+                onChange={handleFileChange}
+              />
+              <div className={styles.fileInputInner}>
+                <div className={styles.fileIcon}>⬆</div>
+                <div>
+                  <p className={styles.filePrimary}>
+                    {selectedFile
+                      ? selectedFile.name
+                      : "Drag & drop or click to select a file"}
+                  </p>
+                  <p className={styles.fileSecondary}>PDF or EPUB • up to 20MB • keep this tab open while it processes</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Voice Selection */}
+          <div className={styles.formGroup}>
+            <label htmlFor="voice-select" className={styles.label}>
+              Choose a Voice
+            </label>
+            <div className={styles.voiceGrid}>
+              {voices.map((voice) => (
+                <button
+                  key={voice.name}
+                  type="button"
+                  className={`${styles.voiceCard} ${
+                    selectedVoice === voice.name ? styles.voiceCardActive : ""
+                  }`}
+                  onClick={() => setSelectedVoice(voice.name)}
+                >
+                  <span className={styles.voiceName}>{voice.label}</span>
+                  <span className={styles.voiceCode}>Tap to choose</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          {(status === "uploading" || status === "processing") && (
+            <>
+              <div className={styles.progressBar}>
+                {status === "uploading" ? (
+                  <div
+                    className={styles.progress}
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                ) : (
+                  <div
+                    className={`${styles.progress} ${styles.progressIndeterminate}`}
+                  ></div>
+                )}
+              </div>
+              {stepMessage && <p className={styles.statusText}>{stepMessage}</p>}
+            </>
+          )}
+
+          {/* Action Button */}
+          <button
+            onClick={handleUploadAndProcess}
+            disabled={
+              !selectedFile || status === "uploading" || status === "processing"
+            }
+            className={styles.button}
+          >
+            {buttonText}
+          </button>
+
+          {/* Error Message */}
+          {status === "error" && error && (
+            <p className={styles.error}>Error: {error}</p>
+          )}
+
+          {/* Audio Player */}
+          {status === "success" && audioUrl && (
+            <div className={styles.audioPlayer}>
+              <div className={styles.audioHeader}>
+                <h3>Your audio is ready</h3>
+                <span className={styles.badgeSoft}>MP3</span>
+              </div>
+              <audio controls src={audioUrl} className={styles.audioControl}>
+                Your browser does not support the audio element.
+              </audio>
+              <a
+                className={styles.downloadLink}
+                href={audioUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download Audio
+              </a>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}

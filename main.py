@@ -15,7 +15,7 @@ from typing import Optional # Import Optional
 from extracter import extract_pdf_text, extract_epub_text, ocr_pdf
 from filter import parse_ocr_data, cluster_body_sizes, filter_body_words
 from tts import long_synthesize_to_wav
-from storage import download_blob, upload_blob, presigned_url, delete_blob # Ensure delete_blob is imported
+from storage import download_blob, upload_blob, presigned_url, delete_blob, get_blob_size # Ensure delete_blob is imported
 
 # --- Configuration (read from environment variables) ---
 # IMPORTANT: For local testing, ensure these are set in your shell or via the -e flag in docker run.
@@ -33,6 +33,9 @@ if not GOOGLE_CLOUD_PROJECT_ID:
     except Exception:
         GOOGLE_CLOUD_PROJECT_ID = None
         print("WARNING: Could not resolve project ID from ADC; Text-to-Speech will fail without it.")
+
+# Hard file size limit (same as frontend guard). Prevents oversized uploads via direct signed URL use.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 # Temporary directory inside the Docker container.
 # This is where all intermediate files (downloaded input, WAV, MP3) will be stored
@@ -164,6 +167,15 @@ async def process_document_endpoint(request: ProcessRequest): # Renamed to avoid
 
 
     try:
+        # Guardrail: enforce max file size before processing
+        blob_size = get_blob_size(full_gcs_input_path)
+        if blob_size > MAX_UPLOAD_BYTES:
+            try:
+                delete_blob(full_gcs_input_path)
+            except Exception as e:
+                print(f"Warning: Failed to delete oversized file {full_gcs_input_path} from GCS: {e}")
+            raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_UPLOAD_BYTES // (1024 * 1024)}MB.")
+
         # 1) Download input PDF/EPUB from GCS
         print(f"Downloading input file from GCS: {full_gcs_input_path} to {local_in}")
         download_blob(full_gcs_input_path, local_in)

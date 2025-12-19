@@ -105,6 +105,18 @@ def delete_blob(blob_name: str) -> None:
     print(f"[storage] Deleted gs://{BUCKET_NAME}/{blob_name}")
 
 
+def get_blob_size(blob_name: str) -> int:
+    """
+    Returns the size of the blob in bytes. Raises FileNotFoundError if missing.
+    """
+    _require_bucket()
+    bucket = client.bucket(BUCKET_NAME)
+    blob = bucket.get_blob(blob_name)
+    if blob is None:
+        raise FileNotFoundError(f"Blob not found: gs://{BUCKET_NAME}/{blob_name}")
+    return blob.size or 0
+
+
 def presigned_url(
     blob_name: str,
     expiration_seconds: int = 3600,
