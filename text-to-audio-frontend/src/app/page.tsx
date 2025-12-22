@@ -5,12 +5,12 @@ import styles from "./page.module.css";
 
 // A list of some available Google Cloud TTS voices
 const voices = [
-  { name: "en-US-Wavenet-F", label: "Warm storyteller (US • Female)" },
-  { name: "en-US-Wavenet-A", label: "Calm narrator (US • Male)" },
-  { name: "en-GB-Wavenet-F", label: "Bright reader (UK • Female)" },
-  { name: "en-GB-Wavenet-A", label: "Steady guide (UK • Male)" },
-  { name: "en-AU-Wavenet-F", label: "Light tone (AU • Female)" },
-  { name: "en-AU-Wavenet-A", label: "Easygoing (AU • Male)" },
+  { name: "en-US-Wavenet-F", label: "US Female" },
+  { name: "en-US-Wavenet-A", label: "US Male" },
+  { name: "en-GB-Wavenet-F", label: "UK Female" },
+  { name: "en-GB-Wavenet-A", label: "UK Male" },
+  { name: "en-AU-Wavenet-F", label: "AU Female" },
+  { name: "en-AU-Wavenet-A", label: "AU Male" },
 ];
 
 export default function Home() {
@@ -188,50 +188,26 @@ export default function Home() {
 
   return (
     <main className={styles.shell}>
-      <div className={styles.backgroundGlow} />
-      <div className={styles.grid}>
-        <section className={styles.hero}>
-          <div className={styles.badge}>AI Narrator</div>
+      <div className={styles.container}>
+        <header className={styles.header}>
+          <div className={styles.badge}>Text to Audio</div>
           <h1 className={styles.title}>
-            Hand off your PDF and we'll read it back to you.
+            Convert documents to audio narration
           </h1>
           <p className={styles.subtitle}>
-            Upload a PDF or EPUB, pick a tone you like, and get a warm narration you can stream or download.
+            Upload a PDF or EPUB file, select a voice, and download your audio file in seconds.
           </p>
+          <p className={styles.statLine}>
+            MP3 format • 6 voices • PDF and EPUB support
+          </p>
+        </header>
 
-          <div className={styles.heroStats}>
-            <div className={styles.statCard}>
-              <span className={styles.statLabel}>Voices</span>
-              <span className={styles.statValue}>Friendly presets</span>
-            </div>
-            <div className={styles.statCard}>
-              <span className={styles.statLabel}>Length</span>
-              <span className={styles.statValue}>Long-form ready</span>
-            </div>
-            <div className={styles.statCard}>
-              <span className={styles.statLabel}>Output</span>
-              <span className={styles.statValue}>Stream & download</span>
-            </div>
-          </div>
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <p className={styles.panelEyebrow}>Step-by-step</p>
-              <h2 className={styles.panelTitle}>Upload &amp; convert</h2>
-            </div>
-            <div className={styles.pulse}>
-              <span className={styles.dot} />
-              <span className={styles.dot} />
-              <span className={styles.dot} />
-            </div>
-          </div>
+        <div className={styles.form}>
 
           {/* File Upload Section */}
           <div className={styles.formGroup}>
             <label htmlFor="file-upload" className={styles.label}>
-              Upload PDF or EPUB
+              File
             </label>
             <div className={styles.fileInput}>
               <input
@@ -241,14 +217,14 @@ export default function Home() {
                 onChange={handleFileChange}
               />
               <div className={styles.fileInputInner}>
-                <div className={styles.fileIcon}>⬆</div>
+                <div className={styles.fileIcon}>📄</div>
                 <div>
                   <p className={styles.filePrimary}>
                     {selectedFile
                       ? selectedFile.name
-                      : "Drag & drop or click to select a file"}
+                      : "Choose file (PDF or EPUB)"}
                   </p>
-                  <p className={styles.fileSecondary}>PDF or EPUB • up to 20MB • keep this tab open while it processes</p>
+                  <p className={styles.fileSecondary}>PDF or EPUB, max 20MB</p>
                 </div>
               </div>
             </div>
@@ -257,7 +233,7 @@ export default function Home() {
           {/* Voice Selection */}
           <div className={styles.formGroup}>
             <label htmlFor="voice-select" className={styles.label}>
-              Choose a Voice
+              Voice
             </label>
             <div className={styles.voiceGrid}>
               {voices.map((voice) => (
@@ -270,7 +246,6 @@ export default function Home() {
                   onClick={() => setSelectedVoice(voice.name)}
                 >
                   <span className={styles.voiceName}>{voice.label}</span>
-                  <span className={styles.voiceCode}>Tap to choose</span>
                 </button>
               ))}
             </div>
@@ -315,7 +290,7 @@ export default function Home() {
           {status === "success" && audioUrl && (
             <div className={styles.audioPlayer}>
               <div className={styles.audioHeader}>
-                <h3>Your audio is ready</h3>
+                <h3>Audio file</h3>
                 <span className={styles.badgeSoft}>MP3</span>
               </div>
               <audio controls src={audioUrl} className={styles.audioControl}>
@@ -327,11 +302,11 @@ export default function Home() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Download Audio
+                Download MP3
               </a>
             </div>
           )}
-        </section>
+        </div>
       </div>
     </main>
   );
