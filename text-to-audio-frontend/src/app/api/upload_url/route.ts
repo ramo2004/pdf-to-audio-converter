@@ -41,10 +41,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(data, { status: response.status });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     console.error("[/api/upload_url] Proxy error:", error);
     return NextResponse.json(
-      { error: "Proxy request failed", detail: error.message },
+      { error: "Proxy request failed", detail: message },
       { status: 502 }
     );
   }

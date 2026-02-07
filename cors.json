@@ -1,7 +1,6 @@
 [
   {
-    "origin": ["http://localhost:3000"],
-    "origin": ["http://localhost:3000", "https://YOUR-VERCEL-DOMAIN.vercel.app"],
+    "origin": ["http://localhost:3000", "https://pdftoaudioconverter.netlify.app"],
     "method": ["GET", "PUT", "HEAD", "OPTIONS"],
     "responseHeader": ["Content-Type", "x-goog-resumable"],
     "maxAgeSeconds": 3600

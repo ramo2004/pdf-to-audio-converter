@@ -44,7 +44,32 @@ export default function Home() {
   };
 
   // Helper to make POST requests with better error handling
-  const postJson = async (url: string, body: object) => {
+  const getStringProp = (value: unknown, key: string): string | undefined => {
+    if (!value || typeof value !== "object") {
+      return undefined;
+    }
+    const record = value as Record<string, unknown>;
+    const prop = record[key];
+    return typeof prop === "string" ? prop : undefined;
+  };
+
+  const getErrorDetail = (value: unknown): string | undefined => {
+    if (!value || typeof value !== "object") {
+      return undefined;
+    }
+    const record = value as Record<string, unknown>;
+    const detail = record.detail;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    const error = record.error;
+    return typeof error === "string" ? error : undefined;
+  };
+
+  const getErrorMessage = (err: unknown): string =>
+    err instanceof Error ? err.message : "An unknown error occurred.";
+
+  const postJson = async (url: string, body: object): Promise<unknown> => {
     console.log(`[Frontend] POST ${url}`, body);
     const res = await fetch(url, {
       method: "POST",
@@ -55,7 +80,7 @@ export default function Home() {
     const text = await res.text();
     console.log(`[Frontend] Response ${res.status}:`, text);
 
-    let json: any = null;
+    let json: unknown = null;
     try {
       json = JSON.parse(text);
     } catch {
@@ -63,7 +88,7 @@ export default function Home() {
     }
 
     if (!res.ok) {
-      const errorMsg = json?.detail || json?.error || text || `HTTP ${res.status}`;
+      const errorMsg = getErrorDetail(json) || text || `HTTP ${res.status}`;
       throw new Error(errorMsg);
     }
 
@@ -121,18 +146,20 @@ export default function Home() {
       const uploadUrlData = await postJson("/api/upload_url", {
         user_id: requestUserId,
         file_name: selectedFile.name,
+        content_type: selectedFile.type || "application/octet-stream",
       });
 
-      const { signed_url, gcs_path } = uploadUrlData;
-      if (!signed_url) {
+      const signedUrl = getStringProp(uploadUrlData, "signed_url");
+      const gcsPath = getStringProp(uploadUrlData, "gcs_path");
+      if (!signedUrl || !gcsPath) {
         throw new Error("No signed_url returned from backend");
       }
-      console.log("[Frontend] Got signed URL, gcs_path:", gcs_path);
+      console.log("[Frontend] Got signed URL, gcs_path:", gcsPath);
       setStepMessage("Uploading file...");
 
       // 2. Upload the file directly to GCS using the signed URL
       console.log("[Frontend] Step 2: Uploading file to GCS...");
-      const uploadResponse = await uploadFileWithProgress(signed_url, selectedFile);
+      const uploadResponse = await uploadFileWithProgress(signedUrl, selectedFile);
 
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
@@ -152,22 +179,22 @@ export default function Home() {
 
       const processData = await postJson("/api/process", {
         user_id: requestUserId,
-        remote_path: gcs_path,
+        remote_path: gcsPath,
         voice_name: selectedVoice,
       });
 
-      const { audio_url } = processData;
-      if (!audio_url) {
+      const audioUrl = getStringProp(processData, "audio_url");
+      if (!audioUrl) {
         throw new Error("No audio_url returned from backend");
       }
 
       console.log("[Frontend] Processing complete, audio URL received");
-      setAudioUrl(audio_url);
+      setAudioUrl(audioUrl);
       setStatus("success");
       setStepMessage("Done! Your audio is ready.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Frontend] Error:", err);
-      setError(err.message || "An unknown error occurred.");
+      setError(getErrorMessage(err));
       setStatus("error");
       setStepMessage("");
     }
