@@ -14,6 +14,7 @@ from pdfminer.high_level import extract_text
 def extract_pdf_text(path):
     return extract_text(path)
 
+import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 def extract_epub_text(path):
@@ -21,5 +22,5 @@ def extract_epub_text(path):
     text = []
     for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
         soup = BeautifulSoup(item.get_content(), "html.parser")
-        text.append(soup.get_text(seperator  = " "))
+        text.append(soup.get_text(separator=" "))
     return "\n\n".join(text)

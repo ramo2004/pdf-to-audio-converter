@@ -45,6 +45,9 @@ export default function Home() {
 
   // Helper to make POST requests with better error handling
   const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "true";
+  const logStatus = (message: string) => {
+    console.info(`[Status] ${message}`);
+  };
 
   const getStringProp = (value: unknown, key: string): string | undefined => {
     if (!value || typeof value !== "object") {
@@ -146,6 +149,7 @@ export default function Home() {
     try {
       const requestUserId = generateUserId();
       // 1. Get a signed URL for upload (via local proxy)
+      logStatus("Requesting upload URL");
       // console.log("[Frontend] Step 1: Getting signed upload URL...");
       if (DEBUG) console.log("[Frontend] Step 1: Getting signed upload URL...");
       const uploadUrlData = await postJson("/api/upload_url", {
@@ -165,6 +169,7 @@ export default function Home() {
       setStepMessage("Uploading file...");
 
       // 2. Upload the file directly to GCS using the signed URL
+      logStatus("Uploading file");
       // console.log("[Frontend] Step 2: Uploading file to GCS...");
       if (DEBUG) console.log("[Frontend] Step 2: Uploading file to GCS...");
       const uploadResponse = await uploadFileWithProgress(signedUrl, selectedFile);
@@ -175,6 +180,7 @@ export default function Home() {
           `GCS upload failed (${uploadResponse.status}): ${errorText}`
         );
       }
+      logStatus("Upload complete");
       // console.log("[Frontend] File uploaded to GCS successfully");
       if (DEBUG) console.log("[Frontend] File uploaded to GCS successfully");
       setProgress(100);
@@ -184,6 +190,7 @@ export default function Home() {
       setStatus("processing");
       setProgress(0);
       setStepMessage("Processing document (this may take a minute)...");
+      logStatus("Processing document");
       // console.log("[Frontend] Step 3: Processing document...");
       if (DEBUG) console.log("[Frontend] Step 3: Processing document...");
 
@@ -201,12 +208,14 @@ export default function Home() {
         throw new Error("No audio_url returned from backend");
       }
 
+      logStatus("Processing complete");
       // console.log("[Frontend] Processing complete, audio URL received");
       if (DEBUG) console.log("[Frontend] Processing complete, audio URL received");
       setAudioUrl(audioUrl);
       setStatus("success");
       setStepMessage("Done! Your audio is ready.");
     } catch (err: unknown) {
+      logStatus("Error occurred");
       // console.error("[Frontend] Error:", err);
       if (DEBUG) console.error("[Frontend] Error:", err);
       setError(getErrorMessage(err));

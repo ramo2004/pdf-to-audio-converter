@@ -2,5 +2,4 @@ venv/
 __pycache__/
 *.pyc
 .DS_Store
-text-to-audio-frontend/node_modules/
-text-to-audio-frontend/.next/
+text-to-audio-frontend/
