@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   const backendUrl = process.env.BACKEND_URL;
   const apiKey = process.env.API_KEY;
+  const debug = process.env.NEXT_PUBLIC_DEBUG === "true";
 
   if (!backendUrl) {
     return NextResponse.json(
@@ -19,8 +20,12 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    console.log("[/api/process] Proxying to:", `${backendUrl}/process`);
-    console.log("[/api/process] Request body:", body);
+    // console.log("[/api/process] Proxying to:", `${backendUrl}/process`);
+    // console.log("[/api/process] Request body:", body);
+    if (debug) {
+      console.log("[/api/process] Proxying to:", `${backendUrl}/process`);
+      console.log("[/api/process] Request body:", body);
+    }
 
     const response = await fetch(`${backendUrl}/process`, {
       method: "POST",
@@ -29,8 +34,12 @@ export async function POST(req: Request) {
     });
 
     const text = await response.text();
-    console.log("[/api/process] Backend status:", response.status);
-    console.log("[/api/process] Backend response:", text.substring(0, 500)); // Truncate for logging
+    // console.log("[/api/process] Backend status:", response.status);
+    // console.log("[/api/process] Backend response:", text.substring(0, 500)); // Truncate for logging
+    if (debug) {
+      console.log("[/api/process] Backend status:", response.status);
+      console.log("[/api/process] Backend response:", text.substring(0, 500));
+    }
 
     // Parse as JSON if possible
     let data;
@@ -43,7 +52,8 @@ export async function POST(req: Request) {
     return NextResponse.json(data, { status: response.status });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[/api/process] Proxy error:", error);
+    // console.error("[/api/process] Proxy error:", error);
+    if (debug) console.error("[/api/process] Proxy error:", error);
     return NextResponse.json(
       { error: "Proxy request failed", detail: message },
       { status: 502 }

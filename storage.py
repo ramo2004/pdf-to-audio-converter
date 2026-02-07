@@ -20,12 +20,19 @@ SIGNER_SA_EMAIL = os.getenv("SIGNER_SA_EMAIL", "").strip()
 IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 
 
-print("[storage] Initializing GCS client...")
+DEBUG = os.getenv("DEBUG", "").lower() == "true"
+
+def _log(message: str) -> None:
+    # print(message)
+    if DEBUG:
+        print(message)
+
+_log("[storage] Initializing GCS client...")
 client = storage.Client()
-print("[storage] GCS client initialized.")
-print(f"[storage] IS_CLOUD_RUN={IS_CLOUD_RUN}")
-print(f"[storage] BUCKET_NAME={'(set)' if BUCKET_NAME else '(missing)'}")
-print(f"[storage] SIGNER_SA_EMAIL={SIGNER_SA_EMAIL or '(missing)'}")
+_log("[storage] GCS client initialized.")
+_log(f"[storage] IS_CLOUD_RUN={IS_CLOUD_RUN}")
+_log(f"[storage] BUCKET_NAME={'(set)' if BUCKET_NAME else '(missing)'}")
+_log(f"[storage] SIGNER_SA_EMAIL={SIGNER_SA_EMAIL or '(missing)'}")
 
 
 def _require_bucket():
@@ -75,7 +82,7 @@ def download_blob(blob_name: str, destination_file_name: str) -> None:
         os.makedirs(parent, exist_ok=True)
 
     blob.download_to_filename(destination_file_name)
-    print(f"[storage] Downloaded gs://{BUCKET_NAME}/{blob_name} -> {destination_file_name}")
+    _log(f"[storage] Downloaded gs://{BUCKET_NAME}/{blob_name} -> {destination_file_name}")
 
 
 def upload_blob(source_file_name: str, blob_name: str) -> None:
@@ -89,7 +96,7 @@ def upload_blob(source_file_name: str, blob_name: str) -> None:
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(source_file_name)
-    print(f"[storage] Uploaded {source_file_name} -> gs://{BUCKET_NAME}/{blob_name}")
+    _log(f"[storage] Uploaded {source_file_name} -> gs://{BUCKET_NAME}/{blob_name}")
 
 
 def delete_blob(blob_name: str) -> None:
@@ -102,7 +109,7 @@ def delete_blob(blob_name: str) -> None:
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(blob_name)
     blob.delete()
-    print(f"[storage] Deleted gs://{BUCKET_NAME}/{blob_name}")
+    _log(f"[storage] Deleted gs://{BUCKET_NAME}/{blob_name}")
 
 
 def get_blob_size(blob_name: str) -> int:
@@ -142,7 +149,7 @@ def presigned_url(
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(blob_name)
 
-    print(
+    _log(
         f"[storage] Generating signed URL: method={method}, exp={expiration_seconds}s, "
         f"blob=gs://{BUCKET_NAME}/{blob_name}, content_type={content_type}"
     )
@@ -173,5 +180,5 @@ def presigned_url(
         # Local fallback: requires a service account key file as ADC to sign.
         signed_url = blob.generate_signed_url(**kwargs)
 
-    print("[storage] Signed URL generated successfully.")
+    _log("[storage] Signed URL generated successfully.")
     return signed_url

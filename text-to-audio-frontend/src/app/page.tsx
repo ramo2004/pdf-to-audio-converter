@@ -44,6 +44,8 @@ export default function Home() {
   };
 
   // Helper to make POST requests with better error handling
+  const DEBUG = process.env.NEXT_PUBLIC_DEBUG === "true";
+
   const getStringProp = (value: unknown, key: string): string | undefined => {
     if (!value || typeof value !== "object") {
       return undefined;
@@ -70,7 +72,8 @@ export default function Home() {
     err instanceof Error ? err.message : "An unknown error occurred.";
 
   const postJson = async (url: string, body: object): Promise<unknown> => {
-    console.log(`[Frontend] POST ${url}`, body);
+    // console.log(`[Frontend] POST ${url}`, body);
+    if (DEBUG) console.log(`[Frontend] POST ${url}`, body);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +81,8 @@ export default function Home() {
     });
 
     const text = await res.text();
-    console.log(`[Frontend] Response ${res.status}:`, text);
+    // console.log(`[Frontend] Response ${res.status}:`, text);
+    if (DEBUG) console.log(`[Frontend] Response ${res.status}:`, text);
 
     let json: unknown = null;
     try {
@@ -142,7 +146,8 @@ export default function Home() {
     try {
       const requestUserId = generateUserId();
       // 1. Get a signed URL for upload (via local proxy)
-      console.log("[Frontend] Step 1: Getting signed upload URL...");
+      // console.log("[Frontend] Step 1: Getting signed upload URL...");
+      if (DEBUG) console.log("[Frontend] Step 1: Getting signed upload URL...");
       const uploadUrlData = await postJson("/api/upload_url", {
         user_id: requestUserId,
         file_name: selectedFile.name,
@@ -155,11 +160,13 @@ export default function Home() {
       if (!signedUrl || !gcsPath) {
         throw new Error("No signed_url returned from backend");
       }
-      console.log("[Frontend] Got signed URL, gcs_path:", gcsPath);
+      // console.log("[Frontend] Got signed URL, gcs_path:", gcsPath);
+      if (DEBUG) console.log("[Frontend] Got signed URL, gcs_path:", gcsPath);
       setStepMessage("Uploading file...");
 
       // 2. Upload the file directly to GCS using the signed URL
-      console.log("[Frontend] Step 2: Uploading file to GCS...");
+      // console.log("[Frontend] Step 2: Uploading file to GCS...");
+      if (DEBUG) console.log("[Frontend] Step 2: Uploading file to GCS...");
       const uploadResponse = await uploadFileWithProgress(signedUrl, selectedFile);
 
       if (!uploadResponse.ok) {
@@ -168,7 +175,8 @@ export default function Home() {
           `GCS upload failed (${uploadResponse.status}): ${errorText}`
         );
       }
-      console.log("[Frontend] File uploaded to GCS successfully");
+      // console.log("[Frontend] File uploaded to GCS successfully");
+      if (DEBUG) console.log("[Frontend] File uploaded to GCS successfully");
       setProgress(100);
       setStepMessage("Upload complete");
 
@@ -176,7 +184,8 @@ export default function Home() {
       setStatus("processing");
       setProgress(0);
       setStepMessage("Processing document (this may take a minute)...");
-      console.log("[Frontend] Step 3: Processing document...");
+      // console.log("[Frontend] Step 3: Processing document...");
+      if (DEBUG) console.log("[Frontend] Step 3: Processing document...");
 
       const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL;
       const processUrl = backendBase ? `${backendBase}/process` : "/api/process";
@@ -192,12 +201,14 @@ export default function Home() {
         throw new Error("No audio_url returned from backend");
       }
 
-      console.log("[Frontend] Processing complete, audio URL received");
+      // console.log("[Frontend] Processing complete, audio URL received");
+      if (DEBUG) console.log("[Frontend] Processing complete, audio URL received");
       setAudioUrl(audioUrl);
       setStatus("success");
       setStepMessage("Done! Your audio is ready.");
     } catch (err: unknown) {
-      console.error("[Frontend] Error:", err);
+      // console.error("[Frontend] Error:", err);
+      if (DEBUG) console.error("[Frontend] Error:", err);
       setError(getErrorMessage(err));
       setStatus("error");
       setStepMessage("");

@@ -37,10 +37,12 @@ GOOGLE_CLOUD_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PR
 if not GOOGLE_CLOUD_PROJECT_ID:
     try:
         _, GOOGLE_CLOUD_PROJECT_ID = google.auth.default()
-        print(f"Resolved project ID from ADC: {GOOGLE_CLOUD_PROJECT_ID}")
+        # print(f"Resolved project ID from ADC: {GOOGLE_CLOUD_PROJECT_ID}")
+        _log(f"Resolved project ID from ADC: {GOOGLE_CLOUD_PROJECT_ID}")
     except Exception:
         GOOGLE_CLOUD_PROJECT_ID = None
-        print("WARNING: Could not resolve project ID from ADC; Text-to-Speech will fail without it.")
+        # print("WARNING: Could not resolve project ID from ADC; Text-to-Speech will fail without it.")
+        _log("WARNING: Could not resolve project ID from ADC; Text-to-Speech will fail without it.")
 
 # Hard file size limit (same as frontend guard). Prevents oversized uploads via direct signed URL use.
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -53,7 +55,15 @@ TMP_DIR = "/tmp/audio_processing"
 # Ensure the temporary directory exists when the app starts.
 # This runs once when the module is loaded.
 os.makedirs(TMP_DIR, exist_ok=True)
-print(f"Temporary directory '{TMP_DIR}' ensured to exist.")
+
+DEBUG = os.getenv("DEBUG", "").lower() == "true"
+
+def _log(message: str) -> None:
+    # print(message)
+    if DEBUG:
+        print(message)
+
+_log(f"Temporary directory '{TMP_DIR}' ensured to exist.")
 
 # Initialize the FastAPI application
 app = FastAPI()
@@ -215,7 +225,8 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
         raise HTTPException(status_code=400, detail="Request body is missing for POST method.")
 
     _require_api_key(request)
-    print(f"Received request for /upload_url. User ID: {upload_request.user_id}, File Name: {upload_request.file_name}")
+    # print(f"Received request for /upload_url. User ID: {upload_request.user_id}, File Name: {upload_request.file_name}")
+    _log(f"Received request for /upload_url. User ID: {upload_request.user_id}, File Name: {upload_request.file_name}")
     _validate_user_id(upload_request.user_id)
     _validate_file_name(upload_request.file_name)
     user_id = upload_request.user_id
@@ -227,10 +238,12 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
     # Construct the full GCS path where the file will be uploaded
     # This ensures user isolation and places it in the 'input' folder
     gcs_blob_name = f"users/{user_id}/input/{file_name}"
-    print(f"Constructed GCS blob name: {gcs_blob_name}")
+    # print(f"Constructed GCS blob name: {gcs_blob_name}")
+    _log(f"Constructed GCS blob name: {gcs_blob_name}")
 
     try:
-        print(f"Attempting to generate signed URL for {gcs_blob_name}...")
+        # print(f"Attempting to generate signed URL for {gcs_blob_name}...")
+        _log(f"Attempting to generate signed URL for {gcs_blob_name}...")
         # Generate a signed URL for a PUT operation (upload)
         # Expiration set to 1 hour (3600 seconds)
         signed_url = presigned_url(
@@ -239,7 +252,8 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
             method="PUT",
             content_type=content_type_for_signed_url,
         )
-        print(f"Successfully generated signed URL for {gcs_blob_name}.")
+        # print(f"Successfully generated signed URL for {gcs_blob_name}.")
+        _log(f"Successfully generated signed URL for {gcs_blob_name}.")
         process_token = _sign_process_token(
             {
                 "user_id": user_id,
@@ -253,7 +267,8 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
             "process_token": process_token,
         }
     except Exception as e:
-        print(f"Error generating signed URL for {gcs_blob_name}: {e}")
+        # print(f"Error generating signed URL for {gcs_blob_name}: {e}")
+        _log(f"Error generating signed URL for {gcs_blob_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Could not generate upload URL: {e}")
 
 
@@ -308,32 +323,39 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
             try:
                 delete_blob(full_gcs_input_path)
             except Exception as e:
-                print(f"Warning: Failed to delete oversized file {full_gcs_input_path} from GCS: {e}")
+                # print(f"Warning: Failed to delete oversized file {full_gcs_input_path} from GCS: {e}")
+                _log(f"Warning: Failed to delete oversized file {full_gcs_input_path} from GCS: {e}")
             raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_UPLOAD_BYTES // (1024 * 1024)}MB.")
 
         # 1) Download input PDF/EPUB from GCS
-        print(f"Downloading input file from GCS: {full_gcs_input_path} to {local_in}")
+        # print(f"Downloading input file from GCS: {full_gcs_input_path} to {local_in}")
+        _log(f"Downloading input file from GCS: {full_gcs_input_path} to {local_in}")
         download_blob(full_gcs_input_path, local_in)
 
         # --- IMMEDIATE DELETION STEP 1: Delete the original input PDF/EPUB from GCS ---
         try:
-            print(f"Deleting original input file from GCS: {full_gcs_input_path}")
+            # print(f"Deleting original input file from GCS: {full_gcs_input_path}")
+            _log(f"Deleting original input file from GCS: {full_gcs_input_path}")
             delete_blob(full_gcs_input_path)
         except Exception as e:
-            print(f"Warning: Failed to delete original input file {full_gcs_input_path} from GCS: {e}")
+            # print(f"Warning: Failed to delete original input file {full_gcs_input_path} from GCS: {e}")
+            _log(f"Warning: Failed to delete original input file {full_gcs_input_path} from GCS: {e}")
         # --- END DELETION STEP 1 ---
 
         # 2) Extract raw text (OCR fallback for scanned PDFs)
         ext = os.path.splitext(local_in)[1].lower()
         raw_text = ""
         if ext == ".epub":
-            print(f"Extracting text from EPUB: {local_in}")
+            # print(f"Extracting text from EPUB: {local_in}")
+            _log(f"Extracting text from EPUB: {local_in}")
             raw_text = extract_epub_text(local_in)
         elif ext == ".pdf":
-            print(f"Extracting text from PDF: {local_in}")
+            # print(f"Extracting text from PDF: {local_in}")
+            _log(f"Extracting text from PDF: {local_in}")
             raw_text = extract_pdf_text(local_in)
             if not raw_text.strip():
-                print(f"No text extracted, attempting OCR for {local_in}")
+                # print(f"No text extracted, attempting OCR for {local_in}")
+                _log(f"No text extracted, attempting OCR for {local_in}")
                 # Assuming ocr_pdf takes local file path. If it needs GCS path, adjust here.
                 ocr_data = ocr_pdf(local_in)
                 words, sizes = parse_ocr_data(ocr_data)
@@ -345,7 +367,8 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
         # Clean up local input file immediately after extraction
         if os.path.exists(local_in):
             os.remove(local_in)
-            print(f"Deleted local input file: {local_in}")
+            # print(f"Deleted local input file: {local_in}")
+            _log(f"Deleted local input file: {local_in}")
             # Mark as cleaned up so finally block doesn't try again
             if local_in in files_to_cleanup_locally: files_to_cleanup_locally.remove(local_in)
 
@@ -357,7 +380,8 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
         text_length = len(raw_text)
 
         if text_length > max_chars_per_doc:
-            print(f"Document too long: {text_length} chars (max {max_chars_per_doc})")
+            # print(f"Document too long: {text_length} chars (max {max_chars_per_doc})")
+            _log(f"Document too long: {text_length} chars (max {max_chars_per_doc})")
             raise HTTPException(
                 status_code=413,
                 detail=f"Document is too long ({text_length:,} characters). Maximum is {max_chars_per_doc:,} characters (~65 pages). Try a shorter document."
@@ -368,7 +392,8 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
 
         # Check quota before processing
         allowed, quota_msg, remaining_daily, remaining_monthly = check_and_update_quota(text_length)
-        print(f"Quota check: {quota_msg}")
+        # print(f"Quota check: {quota_msg}")
+        _log(f"Quota check: {quota_msg}")
 
         if not allowed:
             raise HTTPException(
@@ -382,8 +407,10 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
         # The WAV is stored in a user-specific temporary folder in GCS
         gcs_wav_path = f"users/{user_id}/tmp/{gcs_wav_name}"
 
-        print(f"Synthesizing audio to GCS: gs://{BUCKET_NAME}/{gcs_wav_path}")
-        print(f"Text length: {len(raw_text):,} characters, Voice: {voice_name}, Language: {lang_code}")
+        # print(f"Synthesizing audio to GCS: gs://{BUCKET_NAME}/{gcs_wav_path}")
+        # print(f"Text length: {len(raw_text):,} characters, Voice: {voice_name}, Language: {lang_code}")
+        _log(f"Synthesizing audio to GCS: gs://{BUCKET_NAME}/{gcs_wav_path}")
+        _log(f"Text length: {len(raw_text):,} characters, Voice: {voice_name}, Language: {lang_code}")
 
         try:
             long_synthesize_to_wav(
@@ -394,7 +421,8 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
                 project_id=GOOGLE_CLOUD_PROJECT_ID # Pass the project ID
             )
         except Exception as tts_error:
-            print(f"TTS API error: {tts_error}")
+            # print(f"TTS API error: {tts_error}")
+            _log(f"TTS API error: {tts_error}")
             error_msg = str(tts_error)
             if "QUOTA_EXCEEDED" in error_msg or "quota" in error_msg.lower():
                 raise HTTPException(
@@ -418,21 +446,25 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
                 )
 
         # 4) Download WAV locally
-        print(f"Downloading WAV from GCS: {gcs_wav_path} to {local_wav_path}")
+        # print(f"Downloading WAV from GCS: {gcs_wav_path} to {local_wav_path}")
+        _log(f"Downloading WAV from GCS: {gcs_wav_path} to {local_wav_path}")
         # Note: download_blob expects just the blob name, not the full GCS path (gs://bucket/...)
         # So, it should be gcs_wav_path (which is 'users/{user_id}/tmp/{wav_name}')
         download_blob(gcs_wav_path, local_wav_path)
 
         # --- IMMEDIATE DELETION STEP 2: Delete the temporary WAV file from GCS ---
         try:
-            print(f"Deleting temporary WAV file from GCS: {gcs_wav_path}")
+            # print(f"Deleting temporary WAV file from GCS: {gcs_wav_path}")
+            _log(f"Deleting temporary WAV file from GCS: {gcs_wav_path}")
             delete_blob(gcs_wav_path)
         except Exception as e:
-            print(f"Warning: Failed to delete temporary WAV file {gcs_wav_path} from GCS: {e}")
+            # print(f"Warning: Failed to delete temporary WAV file {gcs_wav_path} from GCS: {e}")
+            _log(f"Warning: Failed to delete temporary WAV file {gcs_wav_path} from GCS: {e}")
         # --- END DELETION STEP 2 ---
 
         # 5) Transcode WAV to MP3 via ffmpeg
-        print(f"Transcoding WAV to MP3: {local_wav_path} to {local_mp3_path}")
+        # print(f"Transcoding WAV to MP3: {local_wav_path} to {local_mp3_path}")
+        _log(f"Transcoding WAV to MP3: {local_wav_path} to {local_mp3_path}")
         subprocess.run([
             "ffmpeg", "-y", "-i", local_wav_path,
             "-codec:a", "libmp3lame", "-b:a", "192k",
@@ -442,33 +474,39 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
         # Clean up local WAV file immediately after transcoding
         if os.path.exists(local_wav_path):
             os.remove(local_wav_path)
-            print(f"Deleted local WAV file: {local_wav_path}")
+            # print(f"Deleted local WAV file: {local_wav_path}")
+            _log(f"Deleted local WAV file: {local_wav_path}")
             # Mark as cleaned up
             if local_wav_path in files_to_cleanup_locally: files_to_cleanup_locally.remove(local_wav_path)
 
         # --- Re-enabled: Upload MP3 to GCS ---
-        print(f"Uploading final MP3 to GCS: {gcs_output_mp3_path}")
+        # print(f"Uploading final MP3 to GCS: {gcs_output_mp3_path}")
+        _log(f"Uploading final MP3 to GCS: {gcs_output_mp3_path}")
         upload_blob(local_mp3_path, gcs_output_mp3_path)
 
         # Clean up local MP3 file after upload
         if os.path.exists(local_mp3_path):
             os.remove(local_mp3_path)
-            print(f"Deleted local MP3 file: {local_mp3_path}")
+            # print(f"Deleted local MP3 file: {local_mp3_path}")
+            _log(f"Deleted local MP3 file: {local_mp3_path}")
             # Mark as cleaned up
             if local_mp3_path in files_to_cleanup_locally: files_to_cleanup_locally.remove(local_mp3_path)
 
         # Return presigned URL for the final MP3
-        print(f"Generating signed URL for MP3: {gcs_output_mp3_path}")
+        # print(f"Generating signed URL for MP3: {gcs_output_mp3_path}")
+        _log(f"Generating signed URL for MP3: {gcs_output_mp3_path}")
         # Use 'GET' method for download URL
         signed_url = presigned_url(gcs_output_mp3_path, expiration_seconds=3600, method='GET') # 1 hour expiration for download
 
         return {"audio_url": signed_url}
 
     except HTTPException as http_exc:
-        print(f"HTTP Exception caught: {http_exc.detail}. Initiating local file cleanup.")
+        # print(f"HTTP Exception caught: {http_exc.detail}. Initiating local file cleanup.")
+        _log(f"HTTP Exception caught: {http_exc.detail}. Initiating local file cleanup.")
         raise http_exc # Re-raise the HTTPException after cleanup
     except Exception as e:
-        print(f"An unexpected error occurred: {e}. Initiating local file cleanup.")
+        # print(f"An unexpected error occurred: {e}. Initiating local file cleanup.")
+        _log(f"An unexpected error occurred: {e}. Initiating local file cleanup.")
         error_msg = str(e)
 
         # Make common errors user-friendly
@@ -505,16 +543,18 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
         for f in files_to_cleanup_locally:
             if os.path.exists(f):
                 os.remove(f)
-                print(f"Cleaned up lingering local file in finally block: {f}")
+                # print(f"Cleaned up lingering local file in finally block: {f}")
+                _log(f"Cleaned up lingering local file in finally block: {f}")
 
 
 # --- Quota Status Endpoint ---
 @app.get("/quota")
-async def get_quota():
+async def get_quota(request: Request):
     """
     Get current quota usage status.
     Returns daily and monthly character usage and limits.
     """
+    _require_api_key(request)
     try:
         status = get_quota_status()
         return {
@@ -537,7 +577,8 @@ async def get_quota():
             }
         }
     except Exception as e:
-        print(f"Error getting quota status: {e}")
+        # print(f"Error getting quota status: {e}")
+        _log(f"Error getting quota status: {e}")
         return {
             "error": "Could not retrieve quota status",
             "limits": {
@@ -570,7 +611,8 @@ async def cleanup_endpoint(
     for blob_path in (tmp_wav_path, output_mp3_path):
         try:
             delete_blob(blob_path)
-            print(f"Cleaned up GCS blob: {blob_path}")
+            # print(f"Cleaned up GCS blob: {blob_path}")
+            _log(f"Cleaned up GCS blob: {blob_path}")
         except Exception as e:
             errors.append(f"{blob_path}: {e}")
     if errors:

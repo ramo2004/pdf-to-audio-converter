@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   const backendUrl = process.env.BACKEND_URL;
   const apiKey = process.env.API_KEY;
+  const debug = process.env.NEXT_PUBLIC_DEBUG === "true";
 
   if (!backendUrl) {
     return NextResponse.json(
@@ -19,8 +20,12 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    console.log("[/api/upload_url] Proxying to:", `${backendUrl}/upload_url`);
-    console.log("[/api/upload_url] Request body:", body);
+    // console.log("[/api/upload_url] Proxying to:", `${backendUrl}/upload_url`);
+    // console.log("[/api/upload_url] Request body:", body);
+    if (debug) {
+      console.log("[/api/upload_url] Proxying to:", `${backendUrl}/upload_url`);
+      console.log("[/api/upload_url] Request body:", body);
+    }
 
     const response = await fetch(`${backendUrl}/upload_url`, {
       method: "POST",
@@ -29,8 +34,12 @@ export async function POST(req: Request) {
     });
 
     const text = await response.text();
-    console.log("[/api/upload_url] Backend status:", response.status);
-    console.log("[/api/upload_url] Backend response:", text);
+    // console.log("[/api/upload_url] Backend status:", response.status);
+    // console.log("[/api/upload_url] Backend response:", text);
+    if (debug) {
+      console.log("[/api/upload_url] Backend status:", response.status);
+      console.log("[/api/upload_url] Backend response:", text);
+    }
 
     // Parse as JSON if possible, otherwise return raw text
     let data;
@@ -43,7 +52,8 @@ export async function POST(req: Request) {
     return NextResponse.json(data, { status: response.status });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[/api/upload_url] Proxy error:", error);
+    // console.error("[/api/upload_url] Proxy error:", error);
+    if (debug) console.error("[/api/upload_url] Proxy error:", error);
     return NextResponse.json(
       { error: "Proxy request failed", detail: message },
       { status: 502 }
