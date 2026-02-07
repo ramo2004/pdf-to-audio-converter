@@ -151,6 +151,7 @@ export default function Home() {
 
       const signedUrl = getStringProp(uploadUrlData, "signed_url");
       const gcsPath = getStringProp(uploadUrlData, "gcs_path");
+      const processToken = getStringProp(uploadUrlData, "process_token");
       if (!signedUrl || !gcsPath) {
         throw new Error("No signed_url returned from backend");
       }
@@ -177,10 +178,13 @@ export default function Home() {
       setStepMessage("Processing document (this may take a minute)...");
       console.log("[Frontend] Step 3: Processing document...");
 
-      const processData = await postJson("/api/process", {
+      const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL;
+      const processUrl = backendBase ? `${backendBase}/process` : "/api/process";
+      const processData = await postJson(processUrl, {
         user_id: requestUserId,
         remote_path: gcsPath,
         voice_name: selectedVoice,
+        process_token: processToken || undefined,
       });
 
       const audioUrl = getStringProp(processData, "audio_url");

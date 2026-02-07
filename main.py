@@ -3,6 +3,11 @@ import uuid
 import subprocess
 import google.auth
 import re
+import time
+import json
+import base64
+import hmac
+import hashlib
 # Removed argparse as it's not used for FastAPI app execution
 # from argparse import ArgumentParser # No longer needed
 
@@ -92,6 +97,52 @@ class ProcessRequest(BaseModel):
     user_id: str
     remote_path: str # e.g., "users/your-uuid/input/my_doc.pdf"
     voice_name: str | None = None # Optional voice name from the frontend
+    process_token: Optional[str] = None
+
+
+PROCESS_TOKEN_TTL_SECONDS = 15 * 60
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode((data + padding).encode("ascii"))
+
+
+def _sign_process_token(payload: dict) -> str:
+    if not API_KEY:
+        raise ValueError("API key not configured.")
+    payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    payload_b64 = _b64url_encode(payload_bytes)
+    signature = hmac.new(API_KEY.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+
+def _verify_process_token(token: str, user_id: str, remote_path: str) -> bool:
+    if not API_KEY:
+        return False
+    try:
+        payload_b64, signature = token.split(".", 1)
+    except ValueError:
+        return False
+    expected_sig = hmac.new(
+        API_KEY.encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected_sig):
+        return False
+    try:
+        payload = json.loads(_b64url_decode(payload_b64))
+    except Exception:
+        return False
+    exp = payload.get("exp")
+    if not isinstance(exp, int) or exp < int(time.time()):
+        return False
+    return payload.get("user_id") == user_id and payload.get("remote_path") == remote_path
 
 
 def _require_api_key(request: Request) -> None:
@@ -100,6 +151,18 @@ def _require_api_key(request: Request) -> None:
     provided = request.headers.get("x-api-key")
     if not provided or provided != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized.")
+
+
+def _authorize_process(request: Request, payload: ProcessRequest) -> None:
+    if API_KEY:
+        provided = request.headers.get("x-api-key")
+        if provided and provided == API_KEY:
+            return
+    if payload.process_token and _verify_process_token(
+        payload.process_token, payload.user_id, payload.remote_path
+    ):
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized.")
 
 
 def _validate_user_id(user_id: str) -> None:
@@ -177,8 +240,18 @@ async def get_upload_signed_url(request: Request, upload_request: Optional[Uploa
             content_type=content_type_for_signed_url,
         )
         print(f"Successfully generated signed URL for {gcs_blob_name}.")
-
-        return {"signed_url": signed_url, "gcs_path": gcs_blob_name}
+        process_token = _sign_process_token(
+            {
+                "user_id": user_id,
+                "remote_path": gcs_blob_name,
+                "exp": int(time.time()) + PROCESS_TOKEN_TTL_SECONDS,
+            }
+        )
+        return {
+            "signed_url": signed_url,
+            "gcs_path": gcs_blob_name,
+            "process_token": process_token,
+        }
     except Exception as e:
         print(f"Error generating signed URL for {gcs_blob_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Could not generate upload URL: {e}")
@@ -191,7 +264,7 @@ async def process_document_endpoint(request: Request, payload: ProcessRequest): 
     Processes a PDF/EPUB, converts it to MP3, uploads to GCS, and returns a signed URL.
     Input and temporary files are immediately deleted from GCS and local storage.
     """
-    _require_api_key(request)
+    _authorize_process(request, payload)
     _validate_user_id(payload.user_id)
     _validate_remote_path(payload.user_id, payload.remote_path)
     user_id = payload.user_id
